@@ -1,0 +1,59 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: crawler-source
+spec:
+  selector:
+    developer: Majid
+    env: Production
+    type: API
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8000
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: crawler-source
+  labels:
+    developer: Majid
+    env: Production
+    type: API
+spec:
+  replicas: $REPLICAS
+  selector:
+    matchLabels:
+      developer: Majid
+      env: Production
+      type: API
+  template:
+    metadata:
+      labels:
+        developer: Majid
+        env: Production
+        type: API
+    spec:
+      restartPolicy: Always
+      containers:
+        - name: crawler-source
+          image: $IMAGE_REPOSITORY:$IMAGE_TAG
+          ports:
+            - containerPort: 8000
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "150m"
+          env:
+            - name: CONFIG_MONGO_USER_NAME
+              value: $CONFIG_MONGO_USER_NAME
+            - name: CONFIG_MONGO_PASSWORD
+              value: $CONFIG_MONGO_PASSWORD
+            - name: CONFIG_MONGO_TABLE_NAME
+              value: $CONFIG_MONGO_TABLE_NAME
+            - name: CONFIG_MONGO_COLLECTION_NAME
+              value: $CONFIG_MONGO_COLLECTION_NAME
+            - name: CONFIG_MONGO_HOST
+              value: $CONFIG_MONGO_HOST
+            - name: CONFIG_MONGO_PORT
+              value: "27017"

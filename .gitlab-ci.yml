@@ -1,0 +1,74 @@
+image: repo-nexus.example.org:8080/python:3.8-slim
+
+.workflow:
+  rules:
+    - if: $CI_COMMIT_BRANCH != "master"
+      when: never
+    - when: always
+
+stages:
+  - test
+  - build
+  - deploy
+
+variables:
+  IMAGE_REPOSITORY: 172.16.1.3/de-markaz/micro/process/crwl-sources
+  IMAGE_TAG: 1.0.$CI_PIPELINE_IID
+  REPLICAS: 1
+
+unit_tests:
+  stage: test
+  before_script:
+    - pip install -r requirements.txt
+  script:
+    - coverage run -m pytest --junitxml=test-results.xml
+    - coverage report -m
+    - coverage html
+  artifacts:
+    paths:
+      - htmlcov/
+    reports:
+      junit: test-results.xml
+
+build_image: 
+  stage: build
+  tags:
+    - shell
+  before_script:
+    - echo $IMAGE_REPOSITORY
+    - echo $IMAGE_TAG
+
+  script:
+    - docker build -t $IMAGE_REPOSITORY:$IMAGE_TAG .
+
+push_image:
+  stage: build
+  tags:
+    - shell
+  needs:
+    - build_image
+  before_script:
+    - cd /bin/kuber
+    - ./docker-credential-vsphere login 172.16.1.3 -u $CONFIG_KUBER_USER:$CONFIG_KUBER_PASS --tlscacert ca.crt
+  script:
+    - docker push $IMAGE_REPOSITORY:$IMAGE_TAG
+  after_script:
+    - docker rmi $IMAGE_REPOSITORY:$IMAGE_TAG
+
+deploy_image:
+ stage: deploy
+ tags:
+   - shell
+ before_script:
+   - export REPLICAS=$REPLICAS
+   - export KUBECTL_VSPHERE_PASSWORD=$CONFIG_KUBER_PASS
+   - export CONFIG_MONGO_USER_NAME=$CONFIG_MONGO_USER_NAME
+   - export CONFIG_MONGO_PASSWORD=$CONFIG_MONGO_PASSWORD
+   - export CONFIG_MONGO_TABLE_NAME=$CONFIG_MONGO_TABLE_NAME
+   - export CONFIG_MONGO_COLLECTION_NAME=$CONFIG_MONGO_COLLECTION_NAME
+   - export CONFIG_MONGO_HOST=$CONFIG_MONGO_HOST
+   - cd /bin/kuber
+   - ./kubectl-vsphere login --server=tanzu-01.example.org -u $CONFIG_KUBER_USER --insecure-skip-tls-verify
+   - ./kubectl config use-context de-markaz
+ script:
+   - envsubst < $CI_PROJECT_DIR/deployment/crawler_source_deployment.yaml | ./kubectl apply -f -
